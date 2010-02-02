@@ -33,7 +33,7 @@ def un_pretty_print(s, units):
         mult = 1e3
     if m.group("mult") == "M":
         mult = 1e6
-    if m.group("units") is not None and m.group("units") != units:
+    if m.group("units") is not None and m.group("units").lower() != units.lower():
         return None
     return float(m.group("num")) * neg * mult
 
