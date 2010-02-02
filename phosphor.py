@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
-from mso19 import mso_interface
+from mso19 import mso
+from dummy import dummy_scope
+from scope_interface import scope_interface
 import sys
 import pygtk
 pygtk.require('2.0')
@@ -18,11 +20,11 @@ import widgets
 class appGui:
     def __init__(self, s, m):
         self.scope_state = s
-        self.mso = m
+        self.scope_interface = m
         self.capabilities = m.get_capabilities()
         self.run_state = 0
         self.state_changed = False
-        self.trigger_mode = self.mso.AUTO
+        self.trigger_mode = self.scope_interface.AUTO
         self.scope_state.time_per_div = self.capabilities.horiz.vals[0]
         self.scope_state.volts_per_div = self.capabilities.vertical.vals[0]
 
@@ -57,9 +59,9 @@ class appGui:
         self.scope_state.trigger_voltage = self.trigger_voltage.value
         self.state_changed = True
         if self.run_state == 1:
-            self.mso.stop()
-            self.mso.set_state(self.scope_state)
-            self.mso.start()
+            self.scope_interface.stop()
+            self.scope_interface.set_state(self.scope_state)
+            self.scope_interface.start()
 
     def data_callback(self, data):
         self.plot(data)
@@ -67,7 +69,7 @@ class appGui:
     def trigger_changed_callback(self, trigger):
         self.statusbar.pop(self.statusbar_contextid)
         self.statusbar.push(self.statusbar_contextid, trigger)
-        if trigger == "stopped" and self.run_state == 1 and self.trigger_mode == self.mso.SINGLE:
+        if trigger == "stopped" and self.run_state == 1 and self.trigger_mode == self.scope_interface.SINGLE:
             self.run_state = 0
             icon = self.wTree.get_widget("start_stop_icon")
             icon.set_from_stock(gtk.STOCK_MEDIA_PLAY, gtk.ICON_SIZE_BUTTON)
@@ -75,26 +77,26 @@ class appGui:
     def start_stop_clicked(self, a):
         icon = self.wTree.get_widget("start_stop_icon")
         if self.run_state == 0:
-            self.mso.set_state(self.scope_state)
-            self.mso.start()
+            self.scope_interface.set_state(self.scope_state)
+            self.scope_interface.start()
             self.run_state = 1
             icon.set_from_stock(gtk.STOCK_MEDIA_STOP, gtk.ICON_SIZE_BUTTON)
         else:
-            self.mso.stop()
+            self.scope_interface.stop()
             self.run_state = 0
             icon.set_from_stock(gtk.STOCK_MEDIA_PLAY, gtk.ICON_SIZE_BUTTON)
 
     def on_trigger_mode_auto_group_changed(self, a):
         if a.get_active():
             if a == self.wTree.get_widget("trigger_mode_auto"):
-                self.trigger_mode = self.mso.AUTO
+                self.trigger_mode = self.scope_interface.AUTO
             elif a == self.wTree.get_widget("trigger_mode_single"):
-                self.trigger_mode = self.mso.SINGLE
+                self.trigger_mode = self.scope_interface.SINGLE
             elif a == self.wTree.get_widget("trigger_mode_normal"):
-                self.trigger_mode = self.mso.NORMAL
+                self.trigger_mode = self.scope_interface.NORMAL
             else:
                 raise Exception("Unknown radio button %s" % a)
-            self.mso.set_trigger_mode(self.trigger_mode)
+            self.scope_interface.set_trigger_mode(self.trigger_mode)
 
     def on_trigger_pos_down_clicked(self, a):
         pass
@@ -174,7 +176,10 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    m = mso_interface(argv[1])
+    try:
+        m = scope_interface(mso, argv[1])
+    except:
+        m = scope_interface(dummy_scope, None)
     s = scope.scope_state()
     app = appGui(s, m)
     gtk.main()

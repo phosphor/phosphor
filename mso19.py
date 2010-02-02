@@ -2,7 +2,6 @@ import serial
 import time
 import sys
 from scope import scope_capabilities, scope_horiz, scope_vertical
-import threading
 
 verbose = 0
 def print_debug(level, s):
@@ -176,102 +175,13 @@ MSO_VERT_OFF_LSB  = 0xD
 MSO_TRIGGER       = 0xE
 MSO_MISC          = 0xF
 
-class mso_interface:
-    def __init__(self, port):
-        self.mso = mso(port)
-        self.thread = threading.Thread(target=self.main_loop)
-
-        # Background thread variables
-        self.quit = False   # Can be set to True by GUI thread
-
-        self.start_event = threading.Event()
-        self.stop_event = threading.Event()
-        self.stopped_event = threading.Event()
-
-        self.state_changed = True
-        self.AUTO, self.NORMAL, self.SINGLE = range(3)
-        self.trigger_mode = self.AUTO
-
-        self.thread.start()
-
-    def set_data_callback(self, callback): self.data_callback = callback
-    def set_trigger_state_changed_callback(self, callback): self.trigger_state_changed_callback = callback
-
-    # Functions called within GUI thread
-    def get_capabilities(self):
-        return mso_capabilities
-
-    def set_state(self, state):
-        self.stop()
-        self.mso.state = state.copy()
-        self.auto_delay = state.time_per_div*10
-        self.state_changed = True
-
-    def set_trigger_mode(self, mode):
-        self.trigger_mode = mode
-        pass
-
-    def start(self):
-        self.stop_event.clear()
-        self.start_event.set()
-
-    def stop(self):
-        self.start_event.clear()
-        self.stop_event.set()
-        self.stopped_event.wait()
-
-    # Background thread
-    def main_loop(self):
-        self.mso.reset()
-
-        while not self.quit:
-            if not self.start_event.isSet():
-                self.trigger_state_changed_callback("stopped")
-                self.stopped_event.set()
-                self.start_event.wait()
-                self.stopped_event.clear()
-            else:
-                if self.state_changed == True:
-                    self.mso.configure_all()
-                    self.state_changed = False
-                trigger_start_time = time.time()
-                self.mso.run()
-                last_trigger_status = None
-                while self.start_event.isSet():
-                    trigger = self.mso.get_trigger_status()
-                    if trigger != last_trigger_status:
-                        self.trigger_state_changed_callback(trigger)
-                        last_trigger_status = trigger
-                    if trigger == "data ready":
-                        data = self.mso.read_data()
-                        self.data_callback(data)
-                        if self.trigger_mode == self.SINGLE:
-                            self.start_event.clear()
-                        else:
-                            self.stop_event.wait(0.125)
-                            trigger_start_time = time.time()
-                            self.mso.run()
-                    elif trigger == "waiting":
-                        if self.trigger_mode == self.AUTO and time.time() - trigger_start_time > self.auto_delay:
-                            self.mso.force_trigger()
-                            last_trigger_status = "auto"
-                            self.trigger_state_changed_callback("auto")
-                        else:
-                            self.stop_event.wait(0.125)
-                    elif trigger == "pretrigger":
-                        pass
-                    elif trigger == "triggered":
-                        pass
-                    elif trigger == "stopped":
-                        pass
-                    else:
-                        print "Unknown trigger %s" % trigger
-
-
 class mso:
     def __init__(self, port):
         self.ser = mso_serial(port)
         self.state = None
+
+    def set_state(self, state):
+        self.state = state
 
     def reset(self):
         self.ser.flush()
@@ -282,6 +192,9 @@ class mso:
 
     def run(self):
         self.ser.send_commands([(MSO_TRIGGER, 0x91), (MSO_TRIGGER, 0x92), (MSO_TRIGGER, 0x90)])
+
+    def stop(self):
+        self.ser.send_commands([(MSO_TRIGGER, 0x91)])
 
     def force_trigger(self):
         self.ser.send_commands([(MSO_TRIGGER, 0x98), (MSO_TRIGGER, 0x90)])
@@ -364,26 +277,24 @@ class mso:
         y_offset = -(self.state.vertical_offset)
         return [(x[0]*x_scale+x_offset, x[1]+y_offset, x[2]) for x in data]
 
+    def get_capabilities(self):
+        return mso_capabilities
+
 class mso_serial:
     def __init__(self, port):
-        try:
-            self.ser = serial.Serial(port, baudrate=460800)
-        except:
-            self.ser = None
+        self.ser = serial.Serial(port, baudrate=460800)
 
     def flush(self):
-        if self.ser:
-            self.ser.flushOutput()
-            self.ser.flushInput()
+        self.ser.flushOutput()
+        self.ser.flushInput()
 
     def send_commands(self, cmds, delay=10, response=0):
-        if self.ser:
-            s = to_cmd("".join((to_cmd_pair(cmd[0], cmd[1]) for cmd in cmds)))
-            write_serial(self.ser, s)
-            if response>0:
-                s = read_serial(self.ser, response, delay)
-                return s
-            else:
-                time.sleep(delay/1000.0)
-                return None
+        s = to_cmd("".join((to_cmd_pair(cmd[0], cmd[1]) for cmd in cmds)))
+        write_serial(self.ser, s)
+        if response>0:
+            s = read_serial(self.ser, response, delay)
+            return s
+        else:
+            time.sleep(delay/1000.0)
+            return None
 
