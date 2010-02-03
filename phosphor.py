@@ -168,10 +168,10 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    try:
-        m = scope_interface(mso, argv[1])
-    except:
+    if argv[1] == "dummy":
         m = scope_interface(dummy_scope, None)
+    else:
+        m = scope_interface(mso, argv[1])
     s = scope.scope_state()
     app = appGui(s, m)
     gtk.main()
