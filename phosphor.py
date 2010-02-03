@@ -11,9 +11,9 @@ import gobject
 gtk.gdk.threads_init()
 
 import matplotlib
-matplotlib.use('GTK')
+matplotlib.use('GTKAgg')
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_gtk import FigureCanvasGTK
+from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg
 import scope
 import widgets
 
@@ -57,6 +57,8 @@ class appGui:
         self.scope_state.trigger_position = self.trigger_position.value
         self.scope_state.vertical_offset = self.vertical_offset.value
         self.scope_state.trigger_voltage = self.trigger_voltage.value
+        self.update_axes()
+        self.canvas.draw_idle()
         self.state_changed = True
         if self.run_state == 1:
             self.scope_interface.stop()
@@ -98,40 +100,18 @@ class appGui:
                 raise Exception("Unknown radio button %s" % a)
             self.scope_interface.set_trigger_mode(self.trigger_mode)
 
-    def on_trigger_pos_down_clicked(self, a):
-        pass
-    def on_trigger_pos_up_clicked(self, a):
-        pass
-    def on_trigger_pos_changed(self, a):
-        pass
-
-    def on_trigger_voltage_down_clicked(self, a):
-        pass
-    def on_trigger_voltage_up_clicked(self, a):
-        pass
-    def on_trigger_voltage_changed(self, a):
-        pass
-
-    def on_vertical_offset_down_clicked(self, a):
-        pass
-    def on_vertical_offset_up_clicked(self, a):
-        pass
-    def on_vertical_offset_changed(self, a):
-        pass
-
     def init_plot(self):
         figure = Figure(figsize=(6,4), dpi=72)
         axes = figure.add_subplot(1,1,1)
-        canvas = FigureCanvasGTK(figure)
+        canvas = FigureCanvasGTKAgg(figure)
         canvas.show()
-        canvas.mpl_connect('pick_event', self.pick_handler)
+        #canvas.mpl_connect('pick_event', self.pick_handler)
         graphview = self.wTree.get_widget("graph")
         graphview.add_with_viewport(canvas)
+        self.figure = figure
         self.canvas = canvas
         self.axes = axes
-        self.plot_line = None
         self.update_axes()
-        self.plot([])
 
         #cursor_horiz_a = Cursor(self.axes, useblit=False)
         #cursor_horiz_b = Cursor(self.axes, useblit=False)
@@ -144,7 +124,9 @@ class appGui:
         y_min = -self.scope_state.volts_per_div*5 - self.scope_state.vertical_offset
         y_max =  self.scope_state.volts_per_div*5 - self.scope_state.vertical_offset
         y_ticks = (y_max-y_min)/10
-
+        self.axes.cla()
+        print "clear axes"
+        self.plot_line = self.axes.plot([], [], 'b-', animated=True)[0]
         self.axes.set_xticks([x_min+x_ticks*x for x in range(11)])
         self.axes.set_xticklabels([widgets.pretty_print(x,"s") for x in self.axes.get_xticks()])
         self.axes.set_yticks([y_min+y_ticks*y for y in range(11)])
@@ -154,18 +136,28 @@ class appGui:
         self.axes.axhline(0, linestyle='-', color='k', picker=True)
         self.axes.axvline(0, linestyle='--', color='r', picker=True)
         self.axes.axis([x_min, x_max, y_min, y_max])
-
+        self.canvas.draw()
+        self.background = self.canvas.copy_from_bbox(self.axes.bbox)
+        gobject.idle_add(self.draw_plot)
+        
     def plot(self, data):
-        #if self.plot_line in self.axes.lines:
-        #    self.axes.lines.remove(self.plot_line)
         if self.state_changed:
             self.state_changed = False
+        self.data = data
+        gobject.idle_add(self.draw_plot)
+       #temp = self.axes.axis()
+        #self.plot_line = self.axes.plot([d[0] for d in data], [d[1] for d in data], 'b-')[0]
+        #self.axes.axis(temp)
 
-        self.axes.cla()
-        self.plot_line = self.axes.plot([d[0] for d in data], [d[1] for d in data], 'b-')[0]
-        self.update_axes()
-        self.canvas.draw_idle()
-        #print "Plotted"
+        #self.canvas.draw_idle()
+
+    def draw_plot(self):
+        print "draw_plot"
+        self.canvas.restore_region(self.background)
+        self.plot_line.set_data([d[0] for d in self.data], [d[1] for d in self.data])
+        self.axes.draw_artist(self.plot_line)
+        self.canvas.blit(self.axes.bbox)
+        return False
 
     def pick_handler(self, event):
         print event.artist
