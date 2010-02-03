@@ -1,9 +1,6 @@
-import serial
 import time
 import sys
 from scope import scope_capabilities, scope_horiz, scope_vertical
-
-from cp210x import cp210x
 
 verbose = 0
 def print_debug(level, s):
@@ -286,7 +283,13 @@ class mso:
 
 class mso_serial:
     def __init__(self, port):
-        self.ser = cp210x(0x3195, 0xf190);
+        if port == "libusb":
+            from cp210x import cp210x
+            self.ser = cp210x(0x3195, 0xf190);
+        else:
+            import serial
+            self.ser = serial.Serial(port, baudrate=460800)
+
 #        self.ser.open()
 #        print self.ser
 
