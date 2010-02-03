@@ -3,6 +3,8 @@ import time
 import sys
 from scope import scope_capabilities, scope_horiz, scope_vertical
 
+from cp210x import cp210x
+
 verbose = 0
 def print_debug(level, s):
     if level <= verbose:
@@ -40,7 +42,7 @@ def read_write(ser, s, delay):
     print_debug(1, "-> %s" % s)
     ser.write(s)
     time.sleep(delay/1e3)
-    s = ser.read(ser.inWaiting())
+    s = ser.read(ser.inWaiting(64))
     print_debug(1, "<- %s" % s)
     return s
 
@@ -54,13 +56,15 @@ def read_serial(ser, len, timeout=1000):
     while len > 0:
         if time.time() - start > timeout/1000.0:
             break
-        l = ser.inWaiting()
+        l = ser.inWaiting(len)
         if l > len:
             l = len
         s += ser.read(l)
         len -= l
-    if ser.inWaiting() > 0:
-        print_debug(0, "WARNING! QUEUED DATA: %d" % ser.inWaiting())
+    if len > 0:
+        print_debug(0, "WARNING! timeout %d bytes not read" % len)
+#    if ser.inWaiting(0) > 0:
+#        print_debug(0, "WARNING! QUEUED DATA: %d" % ser.inWaiting(0))
     print_debug(1, "<- %s" % s)
     return s
 
@@ -282,11 +286,14 @@ class mso:
 
 class mso_serial:
     def __init__(self, port):
-        self.ser = serial.Serial(port, baudrate=460800)
+        self.ser = cp210x(0x3195, 0xf190);
+#        self.ser.open()
+#        print self.ser
 
     def flush(self):
-        self.ser.flushOutput()
-        self.ser.flushInput()
+        pass
+#        self.ser.flushOutput()
+#        self.ser.flushInput()
 
     def send_commands(self, cmds, delay=10, response=0):
         s = to_cmd("".join((to_cmd_pair(cmd[0], cmd[1]) for cmd in cmds)))
