@@ -94,20 +94,20 @@ class cp210x:
         self._out = 0x01
         self.data = ""
         
-        self.handle.controlMsg(requestType = REQTYPE_DEVICE_TO_HOST,
+        self.handle.controlMsg(requestType = REQTYPE_HOST_TO_DEVICE,
                                request = CP210X_RESET,
                                value = 0,
                                index = 0,
                                buffer = 0,
                                timeout = 300)
-        self.handle.controlMsg(requestType = REQTYPE_DEVICE_TO_HOST,
+        self.handle.controlMsg(requestType = REQTYPE_HOST_TO_DEVICE,
                                request =CP210X_IFC_ENABLE,
                                value = UART_ENABLE,
                                index = 0,
                                buffer = 0,
                                timeout = 300)
         baud = 460800
-        self.handle.controlMsg(requestType = REQTYPE_DEVICE_TO_HOST,
+        self.handle.controlMsg(requestType = REQTYPE_HOST_TO_DEVICE,
                                request = CP210X_SET_BAUDDIV,
                                value = (BAUD_RATE_GEN_FREQ + baud/2) / baud,
                                index = 0,
