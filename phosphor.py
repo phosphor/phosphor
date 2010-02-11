@@ -10,10 +10,6 @@ import gtk.glade
 import gobject
 gtk.gdk.threads_init()
 
-import matplotlib
-matplotlib.use('GTKAgg')
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg
 import scope
 import widgets
 
@@ -27,7 +23,8 @@ class appGui:
         self.trigger_mode = self.scope_interface.AUTO
         self.scope_state.time_per_div = self.capabilities.horiz.vals[0]
         self.scope_state.volts_per_div = self.capabilities.vertical.vals[0]
-
+        self.data = []
+        
         m.set_data_callback(lambda x: gobject.idle_add(self.data_callback, x))
         m.set_trigger_state_changed_callback(lambda x: gobject.idle_add(self.trigger_changed_callback, x))
 
@@ -42,7 +39,18 @@ class appGui:
         self.vertical_offset = widgets.ComboBoxButtonDataModel(self.wTree, "vertical_offset", True, [0.0], "V", self.update_state, -20.0, 20.0)
         self.trigger_position = widgets.ComboBoxButtonDataModel(self.wTree, "trigger_pos", True, [0.0, 25.0, 50.0, 75.0, 100.0], "%", self.update_state)
         self.trigger_voltage = widgets.ComboBoxButtonDataModel(self.wTree, "trigger_voltage", True, [0.0], "V", self.update_state, -20.0, 20.0)
-        self.init_plot()
+        self.plot = widgets.PlotWidget(self.wTree, "graph")
+        
+        #self.cursor_horiz = widgets.LinkedCursorDataModel(self.wTree, "horizontal_cursor", self.plot, "horiz", "V", self.update_cursors)
+        #self.cursor_vert = widgets.LinkedCursorDataModel(self.wTree, "vertical_cursor", self.plot, "vert", "s", self.update_cursors)
+        #self.cursor_horiz.a.set(0)
+        #self.cursor_horiz.b.set(.1)
+        #self.cursor_vert.a.set(0)
+        #self.cursor_vert.b.set(.1)
+        #self.plot.add_cursor(self.cursor_horiz.a, "h", "-", "b")
+        #self.plot.add_cursor(self.cursor_horiz.b, "h", "-", "b")
+        #self.plot.add_cursor(self.cursor_vert.a, "v", "-", "b")
+        #self.plot.add_cursor(self.cursor_vert.b, "v", "-", "b")
 
         dic = {
             "on_window_destroy" : gtk.main_quit,
@@ -51,14 +59,16 @@ class appGui:
         }
         self.wTree.signal_autoconnect(dic)
 
+    def update_cursors(self, cursor):
+        pass
+
     def update_state(self, cause):
         self.scope_state.volts_per_div = self.volts_per_div.value
         self.scope_state.time_per_div = self.time_per_div.value
         self.scope_state.trigger_position = self.trigger_position.value
         self.scope_state.vertical_offset = self.vertical_offset.value
         self.scope_state.trigger_voltage = self.trigger_voltage.value
-        self.update_axes()
-        self.canvas.draw_idle()
+        self.plot.update_axes(self.scope_state.time_per_div, self.scope_state.trigger_position, self.scope_state.volts_per_div, self.scope_state.vertical_offset, self.scope_state.trigger_voltage)
         self.state_changed = True
         if self.run_state == 1:
             self.scope_interface.stop()
@@ -66,7 +76,7 @@ class appGui:
             self.scope_interface.start()
 
     def data_callback(self, data):
-        self.plot(data)
+        self.plot.plot(data)
 
     def trigger_changed_callback(self, trigger):
         self.statusbar.pop(self.statusbar_contextid)
@@ -99,65 +109,6 @@ class appGui:
             else:
                 raise Exception("Unknown radio button %s" % a)
             self.scope_interface.set_trigger_mode(self.trigger_mode)
-
-    def init_plot(self):
-        figure = Figure(figsize=(6,4), dpi=72)
-        axes = figure.add_subplot(1,1,1)
-        canvas = FigureCanvasGTKAgg(figure)
-        canvas.show()
-        #canvas.mpl_connect('pick_event', self.pick_handler)
-        graphview = self.wTree.get_widget("graph")
-        graphview.add_with_viewport(canvas)
-        self.figure = figure
-        self.canvas = canvas
-        self.axes = axes
-        self.update_axes()
-
-        #cursor_horiz_a = Cursor(self.axes, useblit=False)
-        #cursor_horiz_b = Cursor(self.axes, useblit=False)
-
-    def update_axes(self):
-        x_min =   -(self.scope_state.trigger_position/10)*self.scope_state.time_per_div
-        x_max = (10-self.scope_state.trigger_position/10)*self.scope_state.time_per_div
-        x_ticks = (x_max-x_min)/10
-
-        y_min = -self.scope_state.volts_per_div*5 - self.scope_state.vertical_offset
-        y_max =  self.scope_state.volts_per_div*5 - self.scope_state.vertical_offset
-        y_ticks = (y_max-y_min)/10
-        self.axes.cla()
-        print "clear axes"
-        self.plot_line = self.axes.plot([], [], 'b-', animated=True)[0]
-        self.axes.set_xticks([x_min+x_ticks*x for x in range(11)])
-        self.axes.set_xticklabels([widgets.pretty_print(x,"s") for x in self.axes.get_xticks()])
-        self.axes.set_yticks([y_min+y_ticks*y for y in range(11)])
-        self.axes.set_yticklabels([widgets.pretty_print(y,"V") for y in self.axes.get_yticks()])
-        self.axes.grid(True)
-        self.axes.axhline(self.scope_state.trigger_voltage, linestyle='--', color='r', picker=True)
-        self.axes.axhline(0, linestyle='-', color='k', picker=True)
-        self.axes.axvline(0, linestyle='--', color='r', picker=True)
-        self.axes.axis([x_min, x_max, y_min, y_max])
-        self.canvas.draw()
-        self.background = self.canvas.copy_from_bbox(self.axes.bbox)
-        gobject.idle_add(self.draw_plot)
-        
-    def plot(self, data):
-        if self.state_changed:
-            self.state_changed = False
-        self.data = data
-        gobject.idle_add(self.draw_plot)
-       #temp = self.axes.axis()
-        #self.plot_line = self.axes.plot([d[0] for d in data], [d[1] for d in data], 'b-')[0]
-        #self.axes.axis(temp)
-
-        #self.canvas.draw_idle()
-
-    def draw_plot(self):
-        print "draw_plot"
-        self.canvas.restore_region(self.background)
-        self.plot_line.set_data([d[0] for d in self.data], [d[1] for d in self.data])
-        self.axes.draw_artist(self.plot_line)
-        self.canvas.blit(self.axes.bbox)
-        return False
 
     def pick_handler(self, event):
         print event.artist
